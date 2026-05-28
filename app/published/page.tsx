@@ -1,26 +1,25 @@
 import Nav from "@/components/Nav";
-import QueueClient from "@/components/QueueClient";
+import PublishedClient from "@/components/PublishedClient";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Post } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function PublishedPage() {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("posts")
     .select("*")
-    .eq("status", "queued")
-    .order("scheduled_date", { ascending: true, nullsFirst: false })
-    .order("post_number", { ascending: true });
+    .eq("status", "posted")
+    .order("posted_at", { ascending: false });
 
   const posts = (data ?? []) as Post[];
 
   return (
     <>
-      <Nav active="queue" />
+      <Nav active="published" />
       <main className="flex-1">
-        <QueueClient posts={posts} />
+        <PublishedClient posts={posts} />
       </main>
     </>
   );

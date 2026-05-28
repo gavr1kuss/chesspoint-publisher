@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ChessPoint Publisher
 
-## Getting Started
+Очередь постов под публикацию по каналам (Telegram / Twitter / Instagram / Threads / YouTube / TikTok / LinkedIn).
+Карточка поста: дата, №, картинка (скачать / копировать), копировать текст, кнопка «Выложено» → пост уходит в общий лог с экспортом в CSV.
 
-First, run the development server:
+Стек: **Next.js + Supabase (Postgres + Storage) + Vercel**.
+
+---
+
+## 1. Supabase (5 минут)
+
+1. Зарегистрируйся на [supabase.com](https://supabase.com), создай новый проект (запомни пароль БД).
+2. Открой **SQL Editor → New query**, вставь содержимое `supabase/schema.sql`, нажми **Run**.
+   Это создаст таблицу `posts` и публичный bucket `post-images`.
+3. Открой **Project Settings → API**, скопируй:
+   - `Project URL` → в `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` ключ → в `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` ключ (СЕКРЕТНЫЙ) → в `SUPABASE_SERVICE_ROLE_KEY`
+
+## 2. Локальный запуск
 
 ```bash
+cp .env.local.example .env.local   # заполни значениями из Supabase + придумай SITE_PASSWORD
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Открой http://localhost:3000 → введи `SITE_PASSWORD`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 3. Деплой на Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Залей проект в репозиторий GitHub (или `vercel` CLI).
+2. На [vercel.com](https://vercel.com) → **Add New → Project** → импортируй репозиторий.
+3. В **Environment Variables** добавь все 4 переменные из `.env.local`:
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SITE_PASSWORD`.
+4. **Deploy.** Готово.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Как добавлять посты
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Через форму** (`/admin` → «Добавить один пост») — канал, дата, текст, картинка drag&drop.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Массово (JSON)** — `/admin` → «Массовый импорт». Формат:
 
-## Deploy on Vercel
+```json
+[
+  { "channel": "twitter",  "scheduled_date": "2026-06-01", "body": "Текст твита…" },
+  { "channel": "telegram", "scheduled_date": "2026-06-01", "body": "Текст для TG…" }
+]
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Допустимые `channel`: `telegram`, `twitter`, `instagram`, `threads`, `youtube`, `tiktok`, `linkedin`.
+Нумерация (`post_number`) проставляется автоматически по каждому каналу.
+Картинки после импорта прикрепляются в «Очереди» кнопкой **+ Прикрепить картинку** (файлы через JSON не передаются).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Структура
+
+```
+app/
+  page.tsx            — Очередь (табы по каналам, карточки)
+  published/page.tsx  — Лог выложенного + экспорт CSV
+  admin/page.tsx      — Добавление / импорт
+  login/page.tsx      — Вход по паролю
+  actions.ts          — серверные действия (CRUD, загрузка картинок)
+components/            — Nav, PostCard, QueueClient, AdminClient, PublishedClient
+lib/                  — constants (каналы), types, supabase/server
+proxy.ts              — пароль на весь сайт
+supabase/schema.sql   — схема БД + bucket
+```
