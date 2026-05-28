@@ -117,6 +117,56 @@ export async function importPosts(jsonText: string): Promise<number> {
   return n;
 }
 
+// ---------- UPDATE: дата публикации ----------
+
+export async function updatePostDate(id: string, date: string | null) {
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("posts")
+    .update({ scheduled_date: date && date.length > 0 ? date : null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+// ---------- DELETE: один слайд из поста ----------
+
+export async function removeSlide(id: string, index: number) {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("posts")
+    .select("image_url, image_path, image_urls, image_paths")
+    .eq("id", id)
+    .maybeSingle();
+
+  const urls: string[] = [
+    ...(data?.image_urls ?? (data?.image_url ? [data.image_url] : [])),
+  ];
+  const paths: string[] = [
+    ...(data?.image_paths ?? (data?.image_path ? [data.image_path] : [])),
+  ];
+  if (index < 0 || index >= urls.length) return;
+
+  const removedPath = paths[index];
+  urls.splice(index, 1);
+  paths.splice(index, 1);
+  if (removedPath) {
+    await sb.storage.from(STORAGE_BUCKET).remove([removedPath]);
+  }
+
+  const { error } = await sb
+    .from("posts")
+    .update({
+      image_url: urls[0] ?? null,
+      image_path: paths[0] ?? null,
+      image_urls: urls.length ? urls : null,
+      image_paths: paths.length ? paths : null,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 // ---------- UPDATE: статус ----------
 
 export async function markPosted(id: string) {

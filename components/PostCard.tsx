@@ -3,7 +3,13 @@
 import { useState, useTransition, useRef } from "react";
 import Image from "next/image";
 import type { Post } from "@/lib/types";
-import { markPosted, deletePost, addImages } from "@/app/actions";
+import {
+  markPosted,
+  deletePost,
+  addImages,
+  updatePostDate,
+  removeSlide,
+} from "@/app/actions";
 
 export default function PostCard({ post }: { post: Post }) {
   const [pending, startTransition] = useTransition();
@@ -114,19 +120,43 @@ export default function PostCard({ post }: { post: Post }) {
     }
   }
 
+  function onChangeDate(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    startTransition(async () => {
+      await updatePostDate(post.id, v || null);
+    });
+  }
+
+  function onRemoveSlide() {
+    if (!confirm(isCarousel ? "Удалить этот слайд?" : "Удалить картинку?"))
+      return;
+    const removeAt = Math.min(idx, slides.length - 1);
+    setIdx((i) => Math.max(0, i - (removeAt === slides.length - 1 ? 1 : 0)));
+    startTransition(async () => {
+      await removeSlide(post.id, removeAt);
+    });
+  }
+
   return (
     <div className="bg-white border-2 border-ink rounded-xl overflow-hidden shadow-[4px_4px_0_0_var(--ink)] flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b-2 border-ink/10">
-        <span className="font-black text-sm">#{post.post_number ?? "—"}</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b-2 border-ink/10 gap-2">
+        <span className="font-black text-sm shrink-0">
+          #{post.post_number ?? "—"}
+        </span>
         <div className="flex items-center gap-2">
           {isCarousel && (
             <span className="text-[10px] font-bold bg-ink text-white rounded px-1.5 py-0.5">
               {idx + 1}/{slides.length}
             </span>
           )}
-          <span className="text-xs text-neutral-500">
-            {post.scheduled_date ?? "без даты"}
-          </span>
+          <input
+            type="date"
+            value={post.scheduled_date ?? ""}
+            onChange={onChangeDate}
+            disabled={pending}
+            title="Изменить дату публикации"
+            className="text-xs border border-ink/30 rounded px-1.5 py-0.5 bg-white hover:border-accent focus:border-accent outline-none disabled:opacity-50"
+          />
         </div>
       </div>
 
@@ -167,15 +197,25 @@ export default function PostCard({ post }: { post: Post }) {
           </div>
         )}
 
-        {/* Кнопка добавить слайд (когда картинка уже есть) */}
+        {/* Добавить слайд / удалить текущий (когда картинка есть) */}
         {current && !dragOver && (
-          <button
-            onClick={() => fileRef.current?.click()}
-            title="Добавить картинку / слайд"
-            className="absolute bottom-1 right-1 bg-ink/80 text-white rounded-md w-7 h-7 text-lg leading-none hover:bg-accent"
-          >
-            +
-          </button>
+          <>
+            <button
+              onClick={() => fileRef.current?.click()}
+              title="Добавить картинку / слайд"
+              className="absolute bottom-1 right-1 bg-ink/80 text-white rounded-md w-7 h-7 text-lg leading-none hover:bg-accent"
+            >
+              +
+            </button>
+            <button
+              onClick={onRemoveSlide}
+              disabled={pending}
+              title={isCarousel ? "Удалить этот слайд" : "Удалить картинку"}
+              className="absolute top-1 right-1 bg-ink/80 text-white rounded-md w-7 h-7 text-lg leading-none hover:bg-accent disabled:opacity-50"
+            >
+              ×
+            </button>
+          </>
         )}
 
         <input
