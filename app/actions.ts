@@ -247,6 +247,66 @@ export async function attachImage(formData: FormData) {
   revalidatePath("/");
 }
 
+// ---------- DIRECT UPLOAD: подписанные URL (обходим лимит тела Vercel 4.5MB) ----------
+
+// Выдаёт одноразовые подписанные URL для прямой загрузки файлов из браузера в Storage.
+export async function signUploads(
+  channel: string,
+  count: number
+): Promise<{ path: string; token: string }[]> {
+  const sb = supabaseAdmin();
+  const out: { path: string; token: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const path = `${channel}/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}-${i}.png`;
+    const { data, error } = await sb.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUploadUrl(path);
+    if (error) throw new Error(error.message);
+    out.push({ path: data.path, token: data.token });
+  }
+  return out;
+}
+
+// После прямой загрузки в Storage — привязывает пути к посту (добавляет слайдами).
+export async function attachUploadedImages(id: string, newPaths: string[]) {
+  const sb = supabaseAdmin();
+  if (newPaths.length === 0) return;
+
+  const { data: existing } = await sb
+    .from("posts")
+    .select("image_url, image_path, image_urls, image_paths")
+    .eq("id", id)
+    .maybeSingle();
+
+  const urls: string[] = [
+    ...(existing?.image_urls ??
+      (existing?.image_url ? [existing.image_url] : [])),
+  ];
+  const paths: string[] = [
+    ...(existing?.image_paths ??
+      (existing?.image_path ? [existing.image_path] : [])),
+  ];
+
+  for (const p of newPaths) {
+    urls.push(sb.storage.from(STORAGE_BUCKET).getPublicUrl(p).data.publicUrl);
+    paths.push(p);
+  }
+
+  const { error } = await sb
+    .from("posts")
+    .update({
+      image_url: urls[0] ?? null,
+      image_path: paths[0] ?? null,
+      image_urls: urls,
+      image_paths: paths,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 // ---------- ADD images (drag&drop): загружает 1+ файлов и ДОБАВЛЯЕТ слайдами ----------
 
 export async function addImages(formData: FormData) {

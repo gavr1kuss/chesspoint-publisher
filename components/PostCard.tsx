@@ -6,10 +6,13 @@ import type { Post } from "@/lib/types";
 import {
   markPosted,
   deletePost,
-  addImages,
   updatePostDate,
   removeSlide,
+  signUploads,
+  attachUploadedImages,
 } from "@/app/actions";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import { STORAGE_BUCKET } from "@/lib/constants";
 
 export default function PostCard({ post }: { post: Post }) {
   const [pending, startTransition] = useTransition();
@@ -103,16 +106,31 @@ export default function PostCard({ post }: { post: Post }) {
     });
   }
 
-  function uploadFiles(files: File[]) {
+  async function uploadFiles(files: File[]) {
     const imgs = files.filter((f) => f.type.startsWith("image/"));
     if (imgs.length === 0) return;
-    const fd = new FormData();
-    fd.set("id", post.id);
-    fd.set("channel", String(post.channel));
-    for (const f of imgs) fd.append("images", f);
-    startTransition(async () => {
-      await addImages(fd);
-    });
+    setBusy("upload");
+    try {
+      // 1. получаем подписанные URL (крошечный запрос к серверу)
+      const signed = await signUploads(String(post.channel), imgs.length);
+      // 2. грузим файлы НАПРЯМУЮ в Supabase Storage (минуя Vercel → без лимита 4.5MB)
+      const paths: string[] = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const { error } = await supabaseBrowser.storage
+          .from(STORAGE_BUCKET)
+          .uploadToSignedUrl(signed[i].path, signed[i].token, imgs[i], {
+            contentType: imgs[i].type || "image/png",
+          });
+        if (error) throw error;
+        paths.push(signed[i].path);
+      }
+      // 3. привязываем пути к посту (крошечный запрос к серверу)
+      await attachUploadedImages(post.id, paths);
+    } catch (e) {
+      alert("Не удалось загрузить картинку: " + (e as Error).message);
+    } finally {
+      setBusy(null);
+    }
   }
 
   function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -218,7 +236,9 @@ export default function PostCard({ post }: { post: Post }) {
             onClick={() => fileRef.current?.click()}
             className="text-sm text-neutral-400 hover:text-accent px-4 py-8 text-center whitespace-pre-line"
           >
-            {pending ? "Загрузка…" : "Перетащи картинку сюда\nили нажми, чтобы выбрать"}
+            {busy === "upload"
+              ? "Загрузка…"
+              : "Перетащи картинку сюда\nили нажми, чтобы выбрать"}
           </button>
         )}
 
@@ -226,6 +246,13 @@ export default function PostCard({ post }: { post: Post }) {
         {dragOver && (
           <div className="absolute inset-0 bg-accent/80 text-white flex items-center justify-center font-black text-sm pointer-events-none">
             Отпусти — закрепим в посте
+          </div>
+        )}
+
+        {/* Оверлей при загрузке */}
+        {busy === "upload" && current && (
+          <div className="absolute inset-0 bg-ink/60 text-white flex items-center justify-center font-black text-sm pointer-events-none">
+            Загрузка…
           </div>
         )}
 
