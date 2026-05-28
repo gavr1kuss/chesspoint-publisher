@@ -15,6 +15,10 @@ create table if not exists public.posts (
   created_at    timestamptz not null default now()
 );
 
+-- Карусели: несколько слайдов на пост (image_url остаётся обложкой/первым слайдом).
+alter table public.posts add column if not exists image_urls  text[];
+alter table public.posts add column if not exists image_paths text[];
+
 create index if not exists posts_channel_status_idx on public.posts (channel, status);
 create index if not exists posts_status_idx on public.posts (status);
 

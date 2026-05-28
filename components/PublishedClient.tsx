@@ -12,12 +12,19 @@ function toCsv(posts: Post[]): string {
     "scheduled_date",
     "posted_at",
     "body",
-    "image_url",
+    "images",
   ];
   const esc = (v: unknown) => {
     const s = String(v ?? "");
     return `"${s.replace(/"/g, '""')}"`;
   };
+  const imagesOf = (p: Post) =>
+    (p.image_urls && p.image_urls.length > 0
+      ? p.image_urls
+      : p.image_url
+        ? [p.image_url]
+        : []
+    ).join(" | ");
   const rows = posts.map((p) =>
     [
       channelLabel(p.channel),
@@ -25,7 +32,7 @@ function toCsv(posts: Post[]): string {
       p.scheduled_date ?? "",
       p.posted_at ?? "",
       p.body,
-      p.image_url ?? "",
+      imagesOf(p),
     ]
       .map(esc)
       .join(",")
@@ -111,7 +118,7 @@ export default function PublishedClient({ posts }: { posts: Post[] }) {
                   <td className="px-3 py-2 max-w-xs">
                     <span className="line-clamp-3">{p.body}</span>
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
                     {p.image_url ? (
                       <a
                         href={p.image_url}
@@ -119,6 +126,9 @@ export default function PublishedClient({ posts }: { posts: Post[] }) {
                         className="text-accent underline"
                       >
                         фото
+                        {p.image_urls && p.image_urls.length > 1
+                          ? ` (${p.image_urls.length})`
+                          : ""}
                       </a>
                     ) : (
                       "—"

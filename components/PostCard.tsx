@@ -10,7 +10,18 @@ export default function PostCard({ post }: { post: Post }) {
   const [copiedText, setCopiedText] = useState(false);
   const [copiedImg, setCopiedImg] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [idx, setIdx] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Все слайды по порядку: массив каруселей, иначе одиночная обложка.
+  const slides =
+    post.image_urls && post.image_urls.length > 0
+      ? post.image_urls
+      : post.image_url
+        ? [post.image_url]
+        : [];
+  const current = slides[Math.min(idx, slides.length - 1)] ?? null;
+  const isCarousel = slides.length > 1;
 
   async function copyText() {
     await navigator.clipboard.writeText(post.body ?? "");
@@ -19,16 +30,12 @@ export default function PostCard({ post }: { post: Post }) {
   }
 
   async function copyImage() {
-    if (!post.image_url) return;
+    if (!current) return;
     setBusy("copy");
     try {
-      const res = await fetch(post.image_url);
+      const res = await fetch(current);
       const blob = await res.blob();
-      // ClipboardItem поддерживает PNG надёжнее всего — конвертируем при необходимости
-      let outBlob = blob;
-      if (blob.type !== "image/png") {
-        outBlob = await toPng(blob);
-      }
+      const outBlob = blob.type === "image/png" ? blob : await toPng(blob);
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": outBlob }),
       ]);
@@ -41,21 +48,28 @@ export default function PostCard({ post }: { post: Post }) {
     }
   }
 
-  async function downloadImage() {
-    if (!post.image_url) return;
+  async function downloadOne(url: string, n: number) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ext = blob.type.split("/")[1] || "png";
+    a.href = objUrl;
+    a.download = `${post.channel}-${post.post_number ?? "post"}-${n}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  async function downloadAll() {
+    if (slides.length === 0) return;
     setBusy("download");
     try {
-      const res = await fetch(post.image_url);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const ext = blob.type.split("/")[1] || "png";
-      a.href = url;
-      a.download = `${post.channel}-${post.post_number ?? "post"}.${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      for (let i = 0; i < slides.length; i++) {
+        await downloadOne(slides[i], i + 1);
+        await new Promise((r) => setTimeout(r, 250)); // не душим браузер
+      }
     } finally {
       setBusy(null);
     }
@@ -89,20 +103,26 @@ export default function PostCard({ post }: { post: Post }) {
   return (
     <div className="bg-white border-2 border-ink rounded-xl overflow-hidden shadow-[4px_4px_0_0_var(--ink)] flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b-2 border-ink/10">
-        <span className="font-black text-sm">
-          #{post.post_number ?? "—"}
-        </span>
-        <span className="text-xs text-neutral-500">
-          {post.scheduled_date ?? "без даты"}
-        </span>
+        <span className="font-black text-sm">#{post.post_number ?? "—"}</span>
+        <div className="flex items-center gap-2">
+          {isCarousel && (
+            <span className="text-[10px] font-bold bg-ink text-white rounded px-1.5 py-0.5">
+              {idx + 1}/{slides.length}
+            </span>
+          )}
+          <span className="text-xs text-neutral-500">
+            {post.scheduled_date ?? "без даты"}
+          </span>
+        </div>
       </div>
 
-      {/* Картинка */}
+      {/* Превью текущего слайда */}
       <div className="relative bg-neutral-100 aspect-square flex items-center justify-center">
-        {post.image_url ? (
+        {current ? (
           <Image
-            src={post.image_url}
-            alt={`post ${post.post_number}`}
+            key={current}
+            src={current}
+            alt={`post ${post.post_number} slide ${idx + 1}`}
             fill
             unoptimized
             className="object-contain"
@@ -124,6 +144,23 @@ export default function PostCard({ post }: { post: Post }) {
         />
       </div>
 
+      {/* Лента миниатюр карусели */}
+      {isCarousel && (
+        <div className="flex gap-1 p-2 border-b-2 border-ink/10 overflow-x-auto">
+          {slides.map((s, i) => (
+            <button
+              key={s}
+              onClick={() => setIdx(i)}
+              className={`relative w-12 h-12 shrink-0 rounded border-2 overflow-hidden ${
+                i === idx ? "border-accent" : "border-ink/20"
+              }`}
+            >
+              <Image src={s} alt={`slide ${i + 1}`} fill unoptimized className="object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Текст */}
       <div className="p-3 flex-1">
         <p className="text-sm whitespace-pre-wrap line-clamp-6">{post.body}</p>
@@ -139,17 +176,17 @@ export default function PostCard({ post }: { post: Post }) {
         </button>
         <button
           onClick={copyImage}
-          disabled={!post.image_url || busy === "copy"}
+          disabled={!current || busy === "copy"}
           className="border-2 border-ink rounded-lg py-1.5 text-sm font-bold hover:bg-ink hover:text-white transition-colors disabled:opacity-30"
         >
-          {copiedImg ? "✓" : busy === "copy" ? "…" : "Копир. фото"}
+          {copiedImg ? "✓" : busy === "copy" ? "…" : isCarousel ? "Копир. слайд" : "Копир. фото"}
         </button>
         <button
-          onClick={downloadImage}
-          disabled={!post.image_url || busy === "download"}
+          onClick={downloadAll}
+          disabled={slides.length === 0 || busy === "download"}
           className="border-2 border-ink rounded-lg py-1.5 text-sm font-bold hover:bg-ink hover:text-white transition-colors disabled:opacity-30"
         >
-          {busy === "download" ? "…" : "Скачать"}
+          {busy === "download" ? "…" : isCarousel ? "Скачать все" : "Скачать"}
         </button>
         <button
           onClick={onMarkPosted}

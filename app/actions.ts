@@ -90,6 +90,8 @@ export async function addPost(formData: FormData) {
     scheduled_date,
     image_url,
     image_path,
+    image_urls: image_url ? [image_url] : null,
+    image_paths: image_path ? [image_path] : null,
     post_number,
     status: "queued",
   });
@@ -145,11 +147,15 @@ export async function deletePost(id: string) {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("posts")
-    .select("image_path")
+    .select("image_path, image_paths")
     .eq("id", id)
     .maybeSingle();
-  if (data?.image_path) {
-    await sb.storage.from(STORAGE_BUCKET).remove([data.image_path]);
+  const paths = [
+    ...(data?.image_paths ?? []),
+    ...(data?.image_path ? [data.image_path] : []),
+  ].filter((p, i, a) => p && a.indexOf(p) === i);
+  if (paths.length > 0) {
+    await sb.storage.from(STORAGE_BUCKET).remove(paths);
   }
   const { error } = await sb.from("posts").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -180,7 +186,12 @@ export async function attachImage(formData: FormData) {
 
   const { error } = await sb
     .from("posts")
-    .update({ image_url, image_path })
+    .update({
+      image_url,
+      image_path,
+      image_urls: [image_url],
+      image_paths: [image_path],
+    })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");

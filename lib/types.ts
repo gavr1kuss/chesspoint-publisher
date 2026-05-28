@@ -8,8 +8,10 @@ export type Post = {
   post_number: number | null;
   scheduled_date: string | null;
   body: string;
-  image_url: string | null;
+  image_url: string | null; // обложка / первый слайд
   image_path: string | null;
+  image_urls: string[] | null; // все слайды карусели по порядку
+  image_paths: string[] | null;
   status: PostStatus;
   posted_at: string | null;
   created_at: string;
