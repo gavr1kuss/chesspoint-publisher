@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  // Картинки бывают по несколько МБ — поднимаем лимит тела server actions (дефолт 1MB)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "25mb",
+    },
+  },
   images: {
     remotePatterns: [
       {

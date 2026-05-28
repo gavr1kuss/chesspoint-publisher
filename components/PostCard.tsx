@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import Image from "next/image";
 import type { Post } from "@/lib/types";
 import {
@@ -18,7 +18,15 @@ export default function PostCard({ post }: { post: Post }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [dateVal, setDateVal] = useState(post.scheduled_date ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // синхронизируем локальное поле даты, когда пост обновился с сервера
+  useEffect(() => {
+    setDateVal(post.scheduled_date ?? "");
+  }, [post.scheduled_date]);
+
+  const dateChanged = dateVal !== (post.scheduled_date ?? "");
 
   // Все слайды по порядку: массив каруселей, иначе одиночная обложка.
   const slides =
@@ -120,11 +128,15 @@ export default function PostCard({ post }: { post: Post }) {
     }
   }
 
-  function onChangeDate(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value;
+  function applyDate() {
+    if (!dateChanged) return;
     startTransition(async () => {
-      await updatePostDate(post.id, v || null);
+      await updatePostDate(post.id, dateVal || null);
     });
+  }
+
+  function cancelDate() {
+    setDateVal(post.scheduled_date ?? "");
   }
 
   function onRemoveSlide() {
@@ -151,12 +163,32 @@ export default function PostCard({ post }: { post: Post }) {
           )}
           <input
             type="date"
-            value={post.scheduled_date ?? ""}
-            onChange={onChangeDate}
+            value={dateVal}
+            onChange={(e) => setDateVal(e.target.value)}
             disabled={pending}
             title="Изменить дату публикации"
             className="text-xs border border-ink/30 rounded px-1.5 py-0.5 bg-white hover:border-accent focus:border-accent outline-none disabled:opacity-50"
           />
+          {dateChanged && (
+            <>
+              <button
+                onClick={applyDate}
+                disabled={pending}
+                title="Применить дату"
+                className="bg-accent text-white rounded w-6 h-6 text-sm font-black leading-none hover:brightness-110 disabled:opacity-50"
+              >
+                ✓
+              </button>
+              <button
+                onClick={cancelDate}
+                disabled={pending}
+                title="Отменить"
+                className="border border-ink/30 rounded w-6 h-6 text-sm leading-none hover:border-accent"
+              >
+                ×
+              </button>
+            </>
+          )}
         </div>
       </div>
 
