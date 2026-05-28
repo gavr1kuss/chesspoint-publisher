@@ -5,7 +5,8 @@ export type ChannelId =
   | "threads"
   | "youtube"
   | "tiktok"
-  | "linkedin";
+  | "linkedin"
+  | "facebook";
 
 export const CHANNELS: { id: ChannelId; label: string; color: string }[] = [
   { id: "telegram", label: "Telegram", color: "#229ED9" },
@@ -15,6 +16,7 @@ export const CHANNELS: { id: ChannelId; label: string; color: string }[] = [
   { id: "youtube", label: "YouTube", color: "#FF0000" },
   { id: "tiktok", label: "TikTok", color: "#000000" },
   { id: "linkedin", label: "LinkedIn", color: "#0A66C2" },
+  { id: "facebook", label: "Facebook", color: "#1877F2" },
 ];
 
 export const CHANNEL_IDS = CHANNELS.map((c) => c.id);
