@@ -196,3 +196,58 @@ export async function attachImage(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/");
 }
+
+// ---------- ADD images (drag&drop): загружает 1+ файлов и ДОБАВЛЯЕТ слайдами ----------
+
+export async function addImages(formData: FormData) {
+  const sb = supabaseAdmin();
+  const id = String(formData.get("id") ?? "");
+  const channel = String(formData.get("channel") ?? "general");
+  const files = formData
+    .getAll("images")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return;
+
+  const { data: existing } = await sb
+    .from("posts")
+    .select("image_url, image_path, image_urls, image_paths")
+    .eq("id", id)
+    .maybeSingle();
+
+  const urls: string[] = [
+    ...(existing?.image_urls ??
+      (existing?.image_url ? [existing.image_url] : [])),
+  ];
+  const paths: string[] = [
+    ...(existing?.image_paths ??
+      (existing?.image_path ? [existing.image_path] : [])),
+  ];
+
+  for (const file of files) {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    const path = `${channel}/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${ext}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { error: upErr } = await sb.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, buffer, { contentType: file.type || "image/png" });
+    if (upErr) throw new Error("Загрузка картинки: " + upErr.message);
+    urls.push(
+      sb.storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl
+    );
+    paths.push(path);
+  }
+
+  const { error } = await sb
+    .from("posts")
+    .update({
+      image_url: urls[0] ?? null,
+      image_path: paths[0] ?? null,
+      image_urls: urls,
+      image_paths: paths,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}

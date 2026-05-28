@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from "react";
 import Image from "next/image";
 import type { Post } from "@/lib/types";
-import { markPosted, deletePost, attachImage } from "@/app/actions";
+import { markPosted, deletePost, addImages } from "@/app/actions";
 
 export default function PostCard({ post }: { post: Post }) {
   const [pending, startTransition] = useTransition();
@@ -11,6 +11,7 @@ export default function PostCard({ post }: { post: Post }) {
   const [copiedImg, setCopiedImg] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Все слайды по порядку: массив каруселей, иначе одиночная обложка.
@@ -88,16 +89,29 @@ export default function PostCard({ post }: { post: Post }) {
     });
   }
 
-  function onAttach(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function uploadFiles(files: File[]) {
+    const imgs = files.filter((f) => f.type.startsWith("image/"));
+    if (imgs.length === 0) return;
     const fd = new FormData();
     fd.set("id", post.id);
     fd.set("channel", String(post.channel));
-    fd.set("image", file);
+    for (const f of imgs) fd.append("images", f);
     startTransition(async () => {
-      await attachImage(fd);
+      await addImages(fd);
     });
+  }
+
+  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) uploadFiles(Array.from(e.target.files));
+    e.target.value = "";
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files?.length) {
+      uploadFiles(Array.from(e.dataTransfer.files));
+    }
   }
 
   return (
@@ -116,8 +130,18 @@ export default function PostCard({ post }: { post: Post }) {
         </div>
       </div>
 
-      {/* Превью текущего слайда */}
-      <div className="relative bg-neutral-100 aspect-square flex items-center justify-center">
+      {/* Превью текущего слайда + зона drag&drop */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={`relative bg-neutral-100 aspect-square flex items-center justify-center transition-shadow ${
+          dragOver ? "ring-4 ring-accent ring-inset" : ""
+        }`}
+      >
         {current ? (
           <Image
             key={current}
@@ -125,22 +149,42 @@ export default function PostCard({ post }: { post: Post }) {
             alt={`post ${post.post_number} slide ${idx + 1}`}
             fill
             unoptimized
-            className="object-contain"
+            className="object-contain pointer-events-none"
           />
         ) : (
           <button
             onClick={() => fileRef.current?.click()}
-            className="text-sm text-neutral-400 hover:text-accent px-4 py-8"
+            className="text-sm text-neutral-400 hover:text-accent px-4 py-8 text-center whitespace-pre-line"
           >
-            {pending ? "Загрузка…" : "+ Прикрепить картинку"}
+            {pending ? "Загрузка…" : "Перетащи картинку сюда\nили нажми, чтобы выбрать"}
           </button>
         )}
+
+        {/* Оверлей при перетаскивании */}
+        {dragOver && (
+          <div className="absolute inset-0 bg-accent/80 text-white flex items-center justify-center font-black text-sm pointer-events-none">
+            Отпусти — закрепим в посте
+          </div>
+        )}
+
+        {/* Кнопка добавить слайд (когда картинка уже есть) */}
+        {current && !dragOver && (
+          <button
+            onClick={() => fileRef.current?.click()}
+            title="Добавить картинку / слайд"
+            className="absolute bottom-1 right-1 bg-ink/80 text-white rounded-md w-7 h-7 text-lg leading-none hover:bg-accent"
+          >
+            +
+          </button>
+        )}
+
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
-          onChange={onAttach}
+          onChange={onInputChange}
         />
       </div>
 
