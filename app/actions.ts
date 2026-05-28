@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { STORAGE_BUCKET, CHANNEL_IDS } from "@/lib/constants";
+import { insertQueuedPosts } from "@/lib/insertPosts";
 import type { ImportPost } from "@/lib/types";
 
 const AUTH_COOKIE = "cp_auth";
@@ -101,7 +102,6 @@ export async function addPost(formData: FormData) {
 // ---------- CREATE: массовый импорт из JSON ----------
 
 export async function importPosts(jsonText: string): Promise<number> {
-  const sb = supabaseAdmin();
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonText);
@@ -109,34 +109,10 @@ export async function importPosts(jsonText: string): Promise<number> {
     throw new Error("Невалидный JSON");
   }
   const arr = (Array.isArray(parsed) ? parsed : [parsed]) as ImportPost[];
-  if (arr.length === 0) return 0;
-
-  // считаем стартовый номер по каждому каналу один раз
-  const counters: Record<string, number> = {};
-  const rows = [];
-  for (const p of arr) {
-    const channel = String(p.channel ?? "");
-    assertChannel(channel);
-    if (counters[channel] === undefined) {
-      counters[channel] = await nextPostNumber(channel);
-    } else {
-      counters[channel] += 1;
-    }
-    rows.push({
-      channel,
-      body: String(p.body ?? ""),
-      scheduled_date: p.scheduled_date ?? null,
-      post_number: counters[channel],
-      status: "queued" as const,
-    });
-  }
-
-  const { error } = await sb.from("posts").insert(rows);
-  if (error) throw new Error(error.message);
-
+  const n = await insertQueuedPosts(arr);
   revalidatePath("/");
   revalidatePath("/admin");
-  return rows.length;
+  return n;
 }
 
 // ---------- UPDATE: статус ----------

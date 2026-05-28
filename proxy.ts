@@ -6,9 +6,10 @@ const AUTH_COOKIE = "cp_auth";
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // /login и статика — пропускаем
+  // /login, /api (своя токен-защита) и статика — пропускаем
   if (
     pathname.startsWith("/login") ||
+    pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname === "/robots.txt"
