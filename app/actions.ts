@@ -1,40 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { STORAGE_BUCKET, CHANNEL_IDS } from "@/lib/constants";
 import { insertQueuedPosts } from "@/lib/insertPosts";
 import type { ImportPost } from "@/lib/types";
-
-const AUTH_COOKIE = "cp_auth";
-
-// ---------- AUTH ----------
-
-export async function login(formData: FormData) {
-  const password = String(formData.get("password") ?? "");
-  const expected = process.env.SITE_PASSWORD;
-  if (!expected) throw new Error("SITE_PASSWORD не задан в окружении");
-  if (password !== expected) {
-    redirect("/login?error=1");
-  }
-  const jar = await cookies();
-  jar.set(AUTH_COOKIE, expected, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 дней
-  });
-  redirect("/");
-}
-
-export async function logout() {
-  const jar = await cookies();
-  jar.delete(AUTH_COOKIE);
-  redirect("/login");
-}
 
 // ---------- HELPERS ----------
 

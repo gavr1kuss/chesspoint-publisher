@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { logout } from "@/app/actions";
 
 export default function Nav({ active }: { active: "queue" | "published" | "admin" }) {
   const item = (href: string, label: string, key: string) => (
@@ -25,11 +24,6 @@ export default function Nav({ active }: { active: "queue" | "published" | "admin
           {item("/published", "Выложено", "published")}
           {item("/admin", "Добавить", "admin")}
         </nav>
-        <form action={logout} className="ml-auto">
-          <button className="text-sm text-neutral-500 hover:text-accent">
-            Выйти
-          </button>
-        </form>
       </div>
     </header>
   );
