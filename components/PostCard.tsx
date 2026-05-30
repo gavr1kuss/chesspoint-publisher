@@ -66,28 +66,57 @@ export default function PostCard({ post }: { post: Post }) {
     }
   }
 
-  async function downloadOne(url: string, n: number) {
-    const res = await fetch(url);
-    const blob = await res.blob();
+  function triggerDownload(blob: Blob, filename: string) {
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const ext = blob.type.split("/")[1] || "png";
     a.href = objUrl;
-    a.download = `${post.channel}-${post.post_number ?? "post"}-${n}.${ext}`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(objUrl);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1500);
   }
 
-  async function downloadAll() {
-    if (slides.length === 0) return;
+  // Скачать ТЕКУЩИЙ слайд (тот, что открыт). На мобиле один файл = один download.
+  async function downloadCurrent() {
+    if (!current) return;
     setBusy("download");
     try {
+      const res = await fetch(current);
+      const blob = await res.blob();
+      const ext = blob.type.split("/")[1] || "png";
+      const slideLabel = isCarousel ? `-${idx + 1}` : "";
+      triggerDownload(
+        blob,
+        `${post.channel}-${post.post_number ?? "post"}${slideLabel}.${ext}`
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Скачать ВСЕ слайды одним ZIP-файлом — на мобиле срабатывает (один файл = одна загрузка).
+  async function downloadAllZip() {
+    if (slides.length === 0) return;
+    setBusy("zip");
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
       for (let i = 0; i < slides.length; i++) {
-        await downloadOne(slides[i], i + 1);
-        await new Promise((r) => setTimeout(r, 250)); // не душим браузер
+        const blob = await (await fetch(slides[i])).blob();
+        const ext = blob.type.split("/")[1] || "png";
+        zip.file(
+          `${post.channel}-${post.post_number ?? "post"}-${i + 1}.${ext}`,
+          blob
+        );
       }
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      triggerDownload(
+        zipBlob,
+        `${post.channel}-${post.post_number ?? "post"}-all.zip`
+      );
+    } catch (e) {
+      alert("Не удалось собрать ZIP: " + (e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -325,12 +354,27 @@ export default function PostCard({ post }: { post: Post }) {
           {copiedImg ? "✓" : busy === "copy" ? "…" : isCarousel ? "Копир. слайд" : "Копир. фото"}
         </button>
         <button
-          onClick={downloadAll}
-          disabled={slides.length === 0 || busy === "download"}
+          onClick={downloadCurrent}
+          disabled={!current || busy === "download"}
           className="border-2 border-ink rounded-lg py-1.5 text-sm font-bold hover:bg-ink hover:text-white transition-colors disabled:opacity-30"
         >
-          {busy === "download" ? "…" : isCarousel ? "Скачать все" : "Скачать"}
+          {busy === "download"
+            ? "…"
+            : isCarousel
+              ? `Скачать слайд ${idx + 1}`
+              : "Скачать"}
         </button>
+        {isCarousel && (
+          <button
+            onClick={downloadAllZip}
+            disabled={busy === "zip"}
+            className="col-span-2 border-2 border-ink rounded-lg py-1.5 text-sm font-bold hover:bg-ink hover:text-white transition-colors disabled:opacity-30"
+          >
+            {busy === "zip"
+              ? "Пакуем ZIP…"
+              : `Скачать все ${slides.length} слайдов (ZIP)`}
+          </button>
+        )}
         <button
           onClick={onMarkPosted}
           disabled={pending}
