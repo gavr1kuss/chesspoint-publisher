@@ -22,7 +22,12 @@ export default function PostCard({ post }: { post: Post }) {
   const [idx, setIdx] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [dateVal, setDateVal] = useState(post.scheduled_date ?? "");
+  const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Кнопка "Развернуть" — только когда текст длинный.
+  const isLong =
+    (post.body?.split("\n").length ?? 0) > 6 || (post.body?.length ?? 0) > 280;
 
   // синхронизируем локальное поле даты, когда пост обновился с сервера
   useEffect(() => {
@@ -335,7 +340,21 @@ export default function PostCard({ post }: { post: Post }) {
 
       {/* Текст */}
       <div className="p-3 flex-1">
-        <p className="text-sm whitespace-pre-wrap line-clamp-6">{post.body}</p>
+        <p
+          className={`text-sm whitespace-pre-wrap ${
+            isLong && !expanded ? "line-clamp-6" : ""
+          }`}
+        >
+          {post.body}
+        </p>
+        {isLong && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-2 text-xs font-bold text-accent hover:underline"
+          >
+            {expanded ? "Свернуть ▲" : "Развернуть ▼"}
+          </button>
+        )}
       </div>
 
       {/* Кнопки */}
