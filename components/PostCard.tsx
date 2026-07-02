@@ -17,6 +17,7 @@ import { STORAGE_BUCKET } from "@/lib/constants";
 export default function PostCard({ post }: { post: Post }) {
   const [pending, startTransition] = useTransition();
   const [copiedText, setCopiedText] = useState(false);
+  const [copiedComment, setCopiedComment] = useState(false);
   const [copiedImg, setCopiedImg] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
@@ -25,9 +26,13 @@ export default function PostCard({ post }: { post: Post }) {
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Кнопка "Развернуть" — только когда текст длинный.
+  const rawBody = post.body ?? "";
+  const sepIdx = rawBody.indexOf("\n---\n");
+  const bodyText = sepIdx >= 0 ? rawBody.slice(0, sepIdx) : rawBody;
+  const firstComment = sepIdx >= 0 ? rawBody.slice(sepIdx + 5) : null;
+
   const isLong =
-    (post.body?.split("\n").length ?? 0) > 6 || (post.body?.length ?? 0) > 280;
+    (bodyText.split("\n").length) > 6 || (bodyText.length) > 280;
 
   // синхронизируем локальное поле даты, когда пост обновился с сервера
   useEffect(() => {
@@ -47,9 +52,16 @@ export default function PostCard({ post }: { post: Post }) {
   const isCarousel = slides.length > 1;
 
   async function copyText() {
-    await navigator.clipboard.writeText(post.body ?? "");
+    await navigator.clipboard.writeText(bodyText);
     setCopiedText(true);
     setTimeout(() => setCopiedText(false), 1500);
+  }
+
+  async function copyComment() {
+    if (!firstComment) return;
+    await navigator.clipboard.writeText(firstComment);
+    setCopiedComment(true);
+    setTimeout(() => setCopiedComment(false), 1500);
   }
 
   async function copyImage() {
@@ -82,19 +94,25 @@ export default function PostCard({ post }: { post: Post }) {
     setTimeout(() => URL.revokeObjectURL(objUrl), 1500);
   }
 
-  // Скачать ТЕКУЩИЙ слайд (тот, что открыт). На мобиле один файл = один download.
   async function downloadCurrent() {
     if (!current) return;
     setBusy("download");
+    const slideLabel = isCarousel ? `-${idx + 1}` : "";
+    const filename = `${post.channel}-${post.post_number ?? "post"}${slideLabel}.png`;
     try {
       const res = await fetch(current);
+      if (!res.ok) throw new Error(res.statusText);
       const blob = await res.blob();
-      const ext = blob.type.split("/")[1] || "png";
-      const slideLabel = isCarousel ? `-${idx + 1}` : "";
-      triggerDownload(
-        blob,
-        `${post.channel}-${post.post_number ?? "post"}${slideLabel}.${ext}`
-      );
+      triggerDownload(blob, filename);
+    } catch {
+      const a = document.createElement("a");
+      a.href = current + (current.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(filename);
+      a.download = filename;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } finally {
       setBusy(null);
     }
@@ -345,7 +363,7 @@ export default function PostCard({ post }: { post: Post }) {
             isLong && !expanded ? "line-clamp-6" : ""
           }`}
         >
-          {post.body}
+          {bodyText}
         </p>
         {isLong && (
           <button
@@ -356,6 +374,22 @@ export default function PostCard({ post }: { post: Post }) {
           </button>
         )}
       </div>
+
+      {/* Первый комментарий */}
+      {firstComment && (
+        <div className="mx-3 mb-3 border-2 border-dashed border-ink/20 rounded-lg p-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-ink/50">Первый комментарий</span>
+            <button
+              onClick={copyComment}
+              className="text-[10px] font-bold border border-ink/30 rounded px-2 py-0.5 hover:bg-ink hover:text-white transition-colors"
+            >
+              {copiedComment ? "✓ Скопировано" : "Копировать"}
+            </button>
+          </div>
+          <p className="text-xs whitespace-pre-wrap text-ink/70">{firstComment}</p>
+        </div>
+      )}
 
       {/* Кнопки */}
       <div className="p-3 pt-0 grid grid-cols-2 gap-2">
