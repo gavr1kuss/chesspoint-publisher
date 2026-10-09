@@ -22,4 +22,5 @@ export type ImportPost = {
   channel: ChannelId | string;
   scheduled_date?: string | null;
   body: string;
+  first_comment?: string | null;
 };

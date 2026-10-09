@@ -27,9 +27,12 @@ export async function insertQueuedPosts(arr: ImportPost[]): Promise<number> {
     } else {
       counters[channel] += 1;
     }
+    const mainBody = String(p.body ?? "");
+    const comment = p.first_comment ? String(p.first_comment) : null;
+    const fullBody = comment ? `${mainBody}\n---\n${comment}` : mainBody;
     rows.push({
       channel,
-      body: String(p.body ?? ""),
+      body: fullBody,
       scheduled_date: p.scheduled_date ?? null,
       post_number: counters[channel],
       status: "queued" as const,

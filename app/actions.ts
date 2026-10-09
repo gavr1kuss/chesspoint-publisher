@@ -32,7 +32,9 @@ export async function addPost(formData: FormData) {
   const sb = supabaseAdmin();
   const channel = String(formData.get("channel") ?? "");
   assertChannel(channel);
-  const body = String(formData.get("body") ?? "");
+  const mainBody = String(formData.get("body") ?? "");
+  const comment = String(formData.get("first_comment") ?? "").trim();
+  const body = comment ? `${mainBody}\n---\n${comment}` : mainBody;
   const scheduled_date = (formData.get("scheduled_date") as string) || null;
   const file = formData.get("image") as File | null;
 
@@ -222,14 +224,16 @@ export async function attachImage(formData: FormData) {
 // Выдаёт одноразовые подписанные URL для прямой загрузки файлов из браузера в Storage.
 export async function signUploads(
   channel: string,
-  count: number
+  count: number,
+  exts?: string[]
 ): Promise<{ path: string; token: string }[]> {
   const sb = supabaseAdmin();
   const out: { path: string; token: string }[] = [];
   for (let i = 0; i < count; i++) {
+    const ext = (exts?.[i] || "png").replace(/[^a-z0-9]/gi, "").slice(0, 5) || "png";
     const path = `${channel}/${Date.now()}-${Math.random()
       .toString(36)
-      .slice(2, 8)}-${i}.png`;
+      .slice(2, 8)}-${i}.${ext}`;
     const { data, error } = await sb.storage
       .from(STORAGE_BUCKET)
       .createSignedUploadUrl(path);

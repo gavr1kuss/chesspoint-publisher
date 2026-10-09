@@ -6,7 +6,7 @@ import { addPost, importPosts } from "@/app/actions";
 
 const SAMPLE = `[
   { "channel": "twitter", "scheduled_date": "2026-06-01", "body": "Текст твита #1 ..." },
-  { "channel": "telegram", "scheduled_date": "2026-06-01", "body": "Текст поста для TG ..." }
+  { "channel": "instagram", "scheduled_date": "2026-06-01", "body": "Подпись...", "first_comment": "Первый комментарий..." }
 ]`;
 
 export default function AdminClient() {
@@ -74,6 +74,14 @@ export default function AdminClient() {
             required
             className="border-2 border-ink rounded-lg px-3 py-2 resize-y"
             placeholder="Текст поста…"
+          />
+
+          <label className="text-sm font-bold">Первый комментарий (опц.)</label>
+          <textarea
+            name="first_comment"
+            rows={3}
+            className="border-2 border-ink rounded-lg px-3 py-2 resize-y text-sm"
+            placeholder="Текст первого комментария…"
           />
 
           <label className="text-sm font-bold">Картинка (опц.)</label>

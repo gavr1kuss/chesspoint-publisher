@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { channelLabel, CHANNELS } from "@/lib/constants";
+import { channelLabel, CHANNELS, mediaUrl } from "@/lib/constants";
 import type { Post } from "@/lib/types";
 import { unpost } from "@/app/actions";
 
@@ -121,7 +121,7 @@ export default function PublishedClient({ posts }: { posts: Post[] }) {
                   <td className="px-3 py-2 text-center whitespace-nowrap">
                     {p.image_url ? (
                       <a
-                        href={p.image_url}
+                        href={mediaUrl(p.image_url)}
                         target="_blank"
                         className="text-accent underline"
                       >

@@ -12,12 +12,19 @@ import {
   attachUploadedImages,
 } from "@/app/actions";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { STORAGE_BUCKET } from "@/lib/constants";
+import { STORAGE_BUCKET, mediaUrl } from "@/lib/constants";
+
+// В слайдах бывают не только картинки, но и видео — рендерим их <video>, а не <Image>.
+const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|$)/i;
+const isVideo = (url: string) => VIDEO_RE.test(url);
+// Расширение файла из URL — для имени при скачивании.
+const extOf = (url: string) => url.split("?")[0].split(".").pop()?.toLowerCase() || "png";
 
 export default function PostCard({ post }: { post: Post }) {
   const [pending, startTransition] = useTransition();
   const [copiedText, setCopiedText] = useState(false);
   const [copiedComment, setCopiedComment] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [copiedImg, setCopiedImg] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
@@ -26,7 +33,12 @@ export default function PostCard({ post }: { post: Post }) {
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const rawBody = post.body ?? "";
+  const fullRaw = post.body ?? "";
+  // Ссылка под сторис хранится в теле после маркера "\n::link::" — вырезаем её.
+  const linkSplit = fullRaw.split("\n::link::");
+  const rawBody = linkSplit[0];
+  const link =
+    linkSplit.length > 1 ? linkSplit.slice(1).join("\n::link::").trim() : null;
   const sepIdx = rawBody.indexOf("\n---\n");
   const bodyText = sepIdx >= 0 ? rawBody.slice(0, sepIdx) : rawBody;
   const firstComment = sepIdx >= 0 ? rawBody.slice(sepIdx + 5) : null;
@@ -42,14 +54,16 @@ export default function PostCard({ post }: { post: Post }) {
   const dateChanged = dateVal !== (post.scheduled_date ?? "");
 
   // Все слайды по порядку: массив каруселей, иначе одиночная обложка.
-  const slides =
+  const slides = (
     post.image_urls && post.image_urls.length > 0
       ? post.image_urls
       : post.image_url
         ? [post.image_url]
-        : [];
+        : []
+  ).map(mediaUrl);
   const current = slides[Math.min(idx, slides.length - 1)] ?? null;
   const isCarousel = slides.length > 1;
+  const currentIsVideo = current ? isVideo(current) : false;
 
   async function copyText() {
     await navigator.clipboard.writeText(bodyText);
@@ -62,6 +76,13 @@ export default function PostCard({ post }: { post: Post }) {
     await navigator.clipboard.writeText(firstComment);
     setCopiedComment(true);
     setTimeout(() => setCopiedComment(false), 1500);
+  }
+
+  async function copyLink() {
+    if (!link) return;
+    await navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 1500);
   }
 
   async function copyImage() {
@@ -98,7 +119,7 @@ export default function PostCard({ post }: { post: Post }) {
     if (!current) return;
     setBusy("download");
     const slideLabel = isCarousel ? `-${idx + 1}` : "";
-    const filename = `${post.channel}-${post.post_number ?? "post"}${slideLabel}.png`;
+    const filename = `${post.channel}-${post.post_number ?? "post"}${slideLabel}.${extOf(current)}`;
     try {
       const res = await fetch(current);
       if (!res.ok) throw new Error(res.statusText);
@@ -159,12 +180,18 @@ export default function PostCard({ post }: { post: Post }) {
   }
 
   async function uploadFiles(files: File[]) {
-    const imgs = files.filter((f) => f.type.startsWith("image/"));
+    const imgs = files.filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
     if (imgs.length === 0) return;
     setBusy("upload");
     try {
       // 1. получаем подписанные URL (крошечный запрос к серверу)
-      const signed = await signUploads(String(post.channel), imgs.length);
+      const signed = await signUploads(
+        String(post.channel),
+        imgs.length,
+        imgs.map((f) => f.name.split(".").pop()?.toLowerCase() || "png")
+      );
       // 2. грузим файлы НАПРЯМУЮ в Supabase Storage (минуя Vercel → без лимита 4.5MB)
       const paths: string[] = [];
       for (let i = 0; i < imgs.length; i++) {
@@ -275,14 +302,25 @@ export default function PostCard({ post }: { post: Post }) {
         }`}
       >
         {current ? (
-          <Image
-            key={current}
-            src={current}
-            alt={`post ${post.post_number} slide ${idx + 1}`}
-            fill
-            unoptimized
-            className="object-contain pointer-events-none"
-          />
+          currentIsVideo ? (
+            <video
+              key={current}
+              src={current}
+              controls
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 w-full h-full object-contain bg-black"
+            />
+          ) : (
+            <Image
+              key={current}
+              src={current}
+              alt={`post ${post.post_number} slide ${idx + 1}`}
+              fill
+              unoptimized
+              className="object-contain pointer-events-none"
+            />
+          )
         ) : (
           <button
             onClick={() => fileRef.current?.click()}
@@ -332,7 +370,7 @@ export default function PostCard({ post }: { post: Post }) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           className="hidden"
           onChange={onInputChange}
@@ -350,7 +388,17 @@ export default function PostCard({ post }: { post: Post }) {
                 i === idx ? "border-accent" : "border-ink/20"
               }`}
             >
-              <Image src={s} alt={`slide ${i + 1}`} fill unoptimized className="object-cover" />
+              {isVideo(s) ? (
+                <video
+                  src={s}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                />
+              ) : (
+                <Image src={s} alt={`slide ${i + 1}`} fill unoptimized className="object-cover" />
+              )}
             </button>
           ))}
         </div>
@@ -391,6 +439,31 @@ export default function PostCard({ post }: { post: Post }) {
         </div>
       )}
 
+      {/* Ссылка под сторис (копируется кнопкой) */}
+      {link && (
+        <div className="mx-3 mb-3 border-2 border-accent/40 rounded-lg p-2.5 bg-accent/5">
+          <div className="flex items-center justify-between mb-1.5 gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-accent">
+              Ссылка
+            </span>
+            <button
+              onClick={copyLink}
+              className="text-[10px] font-bold border border-accent/50 rounded px-2 py-0.5 hover:bg-accent hover:text-white transition-colors shrink-0"
+            >
+              {copiedLink ? "✓ Скопировано" : "Копировать ссылку"}
+            </button>
+          </div>
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-ink/70 break-all hover:text-accent underline decoration-dotted"
+          >
+            {link}
+          </a>
+        </div>
+      )}
+
       {/* Кнопки */}
       <div className="p-3 pt-0 grid grid-cols-2 gap-2">
         <button
@@ -401,10 +474,18 @@ export default function PostCard({ post }: { post: Post }) {
         </button>
         <button
           onClick={copyImage}
-          disabled={!current || busy === "copy"}
+          disabled={!current || currentIsVideo || busy === "copy"}
           className="border-2 border-ink rounded-lg py-1.5 text-sm font-bold hover:bg-ink hover:text-white transition-colors disabled:opacity-30"
         >
-          {copiedImg ? "✓" : busy === "copy" ? "…" : isCarousel ? "Копир. слайд" : "Копир. фото"}
+          {copiedImg
+            ? "✓"
+            : busy === "copy"
+              ? "…"
+              : currentIsVideo
+                ? "Видео — только скачать"
+                : isCarousel
+                  ? "Копир. слайд"
+                  : "Копир. фото"}
         </button>
         <button
           onClick={downloadCurrent}
